@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -116,9 +117,30 @@ func onAuthDone(w http.ResponseWriter, r *http.Request) {
 	client := config.Client(ctx, tok)
 	srv, err := gmail.New(client)
 	user := "me"
-	res, err2 := srv.Users.Messages.List(user).Do()
-	log.Println(res)
-	log.Println(err2)
+	res, err2 := srv.Users.Messages.List(user).MaxResults(10).Q("from:*@linkedin.com replyto:*@linkedin.com newer_than:7d").Do()
+	if err2 != nil {
+		log.Println(err2)
+		http.Error(w, "Can't get messages", http.StatusInternalServerError)
+		return
+	}
+	messages := res.Messages
+	for _, msg := range messages {
+		log.Println(msg.Id)
+		mail, err3 := srv.Users.Messages.Get(user, msg.Id).Format("full").Do()
+		if err3 != nil {
+			log.Println(err3)
+			http.Error(w, "Can't get messages", http.StatusInternalServerError)
+			return
+		}
+		//log.Println(mail.Payload.Body.Data)
+		log.Println(mail.Payload.Body.Data)
+		for _, part := range mail.Payload.Parts {
+			p, _ := base64.StdEncoding.DecodeString(part.Body.Data)
+			log.Println(string(p))
+		}
+	}
+	//log.Println(res)
+
 	w.Write(([]byte)("Got success"))
 }
 
@@ -142,7 +164,7 @@ func main() {
 
 	// If modifying these scopes, delete your previously saved credentials
 	// at ~/.credentials/gmail-go-quickstart.json
-	config, err1 = google.ConfigFromJSON(b, gmail.GmailSendScope, gmail.GmailComposeScope, gmail.GmailModifyScope)
+	config, err1 = google.ConfigFromJSON(b, gmail.GmailSendScope, gmail.GmailComposeScope, gmail.GmailModifyScope, gmail.GmailReadonlyScope)
 	if err1 != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
