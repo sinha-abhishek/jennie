@@ -21,7 +21,7 @@ func getTimeOfLastScan() time.Time {
 	return t2
 }
 
-func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oauth2.Token) {
+func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oauth2.Token, uid string) {
 	qtime := getTimeOfLastScan().Unix()
 	qtimeString := strconv.FormatInt(qtime, 10)
 	query := searchString + " after:" + qtimeString
@@ -31,7 +31,7 @@ func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oau
 		log.Println(err)
 		return
 	}
-	user := "me"
+	user := uid
 	log.Println(query)
 	res, err2 := srv.Users.Messages.List(user).MaxResults(10).Q(query).Do()
 	if err2 != nil {

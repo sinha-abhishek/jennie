@@ -11,7 +11,7 @@ import (
 	"os/user"
 	"path/filepath"
 
-	"github.com/sinha-abhishek/jennie/linkedin"
+	"github.com/sinha-abhishek/jennie/userdetails"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -114,6 +114,11 @@ func onAuthDone(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 	log.Println(tok)
+	user, err2 := userdetails.FetchAndSaveUser(ctx, config, tok)
+	if err2 != nil {
+		user.DoEmailAutomationForUser(ctx, config)
+	}
+
 	// client := config.Client(ctx, tok)
 	// srv, err := gmail.New(client)
 	// user := "me"
@@ -147,13 +152,38 @@ func onAuthDone(w http.ResponseWriter, r *http.Request) {
 	// //log.Println(res)
 	//
 	// w.Write(([]byte)("Got success"))
-	linkedin.SearchMailAndRespond(ctx, config, tok)
+	//linkedin.SearchMailAndRespond(ctx, config, tok)
+
 	w.Write(([]byte)("Got success"))
+}
+
+func doTaskForUser(w http.ResponseWriter, r *http.Request) {
+	host := r.Host
+	log.Println("host=", host)
+	ids, ok := r.URL.Query()["id"]
+	if !ok || len(ids) < 1 {
+		log.Println("id not recieved")
+		http.Error(w, "id not recieved", http.StatusBadRequest)
+		return
+	}
+	id := ids[0]
+	user, err := userdetails.GetUser(id)
+	if err != nil {
+		log.Println("id not recieved")
+		http.Redirect(w, r, "http://"+host+"/jennie/authorize", http.StatusTemporaryRedirect)
+		//http.Error(w, "id not recieved", http.StatusBadRequest)
+	} else {
+		//linkedin.SearchMailAndRespond(ctx, config, token)
+		user.DoEmailAutomationForUser(ctx, config)
+		log.Println("I have user ", user)
+	}
+
 }
 
 func startServer() {
 	http.HandleFunc("/jennie/authorize", authorizeGmail)
 	http.HandleFunc("/jennie/onauthcallback", onAuthDone)
+	http.HandleFunc("/jennie/user", doTaskForUser)
 	err := http.ListenAndServe(":8000", nil)
 	if err != nil {
 		log.Println(err)
@@ -175,6 +205,7 @@ func main() {
 	if err1 != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
+	go userdetails.PeriodicPuller(ctx, config)
 	startServer()
 	client := getClient(ctx, config)
 
