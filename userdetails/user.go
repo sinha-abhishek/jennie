@@ -20,7 +20,7 @@ type User struct {
 }
 
 var (
-	userList = make([]User, 10)
+	userList = make([]User, 0)
 )
 
 func GetUser(userID string) (*User, error) {
@@ -30,6 +30,8 @@ func GetUser(userID string) (*User, error) {
 		return user, err
 	}
 	err = json.NewDecoder(f).Decode(user)
+	//TODO : remove
+	userList = append(userList, *user)
 	return user, err
 }
 

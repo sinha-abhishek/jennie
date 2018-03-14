@@ -168,6 +168,7 @@ func doTaskForUser(w http.ResponseWriter, r *http.Request) {
 	}
 	id := ids[0]
 	user, err := userdetails.GetUser(id)
+	log.Println("token=", user.Token)
 	if err != nil {
 		log.Println("id not recieved")
 		http.Redirect(w, r, "http://"+host+"/jennie/authorize", http.StatusTemporaryRedirect)

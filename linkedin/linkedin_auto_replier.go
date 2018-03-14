@@ -23,6 +23,7 @@ func getTimeOfLastScan() time.Time {
 
 func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oauth2.Token, uid string) {
 	qtime := getTimeOfLastScan().Unix()
+	log.Println("token=", token)
 	qtimeString := strconv.FormatInt(qtime, 10)
 	query := searchString + " after:" + qtimeString
 	client := config.Client(ctx, token)
