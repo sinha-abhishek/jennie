@@ -11,6 +11,7 @@ import (
 	"os/user"
 	"path/filepath"
 
+	"github.com/sinha-abhishek/jennie/awshelper"
 	"github.com/sinha-abhishek/jennie/userdetails"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
@@ -200,6 +201,7 @@ func main() {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}
 
+	awshelper.Init()
 	// If modifying these scopes, delete your previously saved credentials
 	// at ~/.credentials/gmail-go-quickstart.json
 	config, err1 = google.ConfigFromJSON(b, gmail.GmailSendScope, gmail.GmailComposeScope, gmail.GmailModifyScope, gmail.GmailReadonlyScope)
