@@ -3,10 +3,12 @@ package userdetails
 import (
 	"context"
 	"encoding/json"
+	"io/ioutil"
 	"log"
 	"os"
 	"time"
 
+	"github.com/sinha-abhishek/jennie/cryptohelper"
 	"github.com/sinha-abhishek/jennie/linkedin"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/gmail/v1"
@@ -25,11 +27,18 @@ var (
 
 func GetUser(userID string) (*User, error) {
 	user := &User{}
-	f, err := os.Open(userID + ".txt")
+	f, err := ioutil.ReadFile(userID + ".txt")
 	if err != nil {
+		log.Println("Not found")
 		return user, err
 	}
-	err = json.NewDecoder(f).Decode(user)
+	b, err2 := cryptohelper.Decrypt(f, userID)
+	log.Println(string(b))
+	if err2 != nil {
+		log.Println("can't decrypt")
+		return user, err2
+	}
+	err = json.Unmarshal(b, user)
 	//TODO : remove
 	userList = append(userList, *user)
 	return user, err
@@ -51,14 +60,24 @@ func FetchAndSaveUser(ctx context.Context, config *oauth2.Config, token *oauth2.
 	user := User{}
 	user.UserID = res.EmailAddress
 	user.Token = *token
+
+	userData, _ := json.Marshal(user)
+	encData, err4 := cryptohelper.Encrypt(userData, user.UserID)
+	if err4 != nil {
+		log.Println(err4)
+		return nil, err4
+	}
 	//TODO: move this to a DB
-	f, err3 := os.OpenFile(user.UserID+".txt", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	//TODO:
+	err3 := ioutil.WriteFile(user.UserID+".txt", encData, os.ModeExclusive)
+	// f, err3 := os.OpenFile(user.UserID+".txt", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err3 != nil {
 		log.Fatalf("Unable to cache user: %v", err3)
 		return nil, err3
 	}
-	defer f.Close()
-	json.NewEncoder(f).Encode(user)
+	// defer f.Close()
+	// log.Println(encData)
+	// json.NewEncoder(f).Encode(encData)
 	userList = append(userList, user)
 	return &user, nil
 }

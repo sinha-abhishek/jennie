@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/sinha-abhishek/jennie/awshelper"
+	"github.com/sinha-abhishek/jennie/cryptohelper"
 	"github.com/sinha-abhishek/jennie/userdetails"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
@@ -113,6 +114,7 @@ func onAuthDone(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatalf("Unable to retrieve token from web %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 	log.Println(tok)
 	user, err2 := userdetails.FetchAndSaveUser(ctx, config, tok)
@@ -171,7 +173,7 @@ func doTaskForUser(w http.ResponseWriter, r *http.Request) {
 	user, err := userdetails.GetUser(id)
 	log.Println("token=", user.Token)
 	if err != nil {
-		log.Println("id not recieved")
+		log.Println("id not recieved or user not found", err)
 		http.Redirect(w, r, "http://"+host+"/jennie/authorize", http.StatusTemporaryRedirect)
 		//http.Error(w, "id not recieved", http.StatusBadRequest)
 	} else {
@@ -201,7 +203,13 @@ func main() {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}
 
-	awshelper.Init()
+	err = awshelper.Init()
+	err = cryptohelper.InitializeAES()
+	if err != nil {
+		log.Fatalf("Unable to read client secret file: %v", err)
+		panic(err)
+	}
+
 	// If modifying these scopes, delete your previously saved credentials
 	// at ~/.credentials/gmail-go-quickstart.json
 	config, err1 = google.ConfigFromJSON(b, gmail.GmailSendScope, gmail.GmailComposeScope, gmail.GmailModifyScope, gmail.GmailReadonlyScope)
