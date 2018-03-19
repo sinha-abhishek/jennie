@@ -40,7 +40,7 @@ func GetUser(userID string) (*User, error) {
 	}
 	err = json.Unmarshal(b, user)
 	//TODO : remove
-	userList = append(userList, *user)
+	//userList = append(userList, *user)
 	return user, err
 }
 

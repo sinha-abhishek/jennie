@@ -13,6 +13,7 @@ import (
 
 	"github.com/sinha-abhishek/jennie/awshelper"
 	"github.com/sinha-abhishek/jennie/cryptohelper"
+	"github.com/sinha-abhishek/jennie/linkedin"
 	"github.com/sinha-abhishek/jennie/userdetails"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
@@ -209,6 +210,7 @@ func main() {
 		log.Fatalf("Unable to read client secret file: %v", err)
 		panic(err)
 	}
+	linkedin.InitializeLinkedinResponder()
 
 	// If modifying these scopes, delete your previously saved credentials
 	// at ~/.credentials/gmail-go-quickstart.json

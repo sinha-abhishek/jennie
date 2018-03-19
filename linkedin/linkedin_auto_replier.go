@@ -2,10 +2,16 @@ package linkedin
 
 import (
 	"context"
+	"encoding/base64"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/sinha-abhishek/jennie/confighelper"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/gmail/v1"
 )
@@ -13,11 +19,30 @@ import (
 var (
 	searchString = "from:*@linkedin.com replyto:*@linkedin.com -replyto:*donotreply*"
 )
+var RespondedIdsMap map[string]bool
+
+func InitializeLinkedinResponder() {
+	//TODO: move this to DynamoDB
+	log.Println("Reading responded file")
+	f, err := os.Open("responded.txt")
+	RespondedIdsMap = make(map[string]bool)
+	if err != nil {
+		log.Println("Failed to read responded file")
+		return
+	}
+	data, err := ioutil.ReadAll(f)
+	str := string(data)
+	s := strings.Split(str, "\n")
+	for _, v := range s {
+		RespondedIdsMap[v] = true
+	}
+	log.Println("Responded = ", RespondedIdsMap)
+}
 
 func getTimeOfLastScan() time.Time {
 	//TODO: store last responded timestamp and get after that
 	t := time.Now()
-	t2 := t.AddDate(0, 0, -2)
+	t2 := t.AddDate(0, 0, -7)
 	return t2
 }
 
@@ -59,7 +84,60 @@ func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oau
 		log.Println("Got ", headerMap)
 		//TODO: reply to replyto fileds
 		//srv.Users.Messages.Send(user, message)
+		reply(uid, srv, msg, headerMap)
 
 	}
 
+}
+
+func reply(uid string, srv *gmail.Service, msg *gmail.Message, headerMap map[string]string) (string, error) {
+	thId := msg.ThreadId
+	if RespondedIdsMap[thId] == true {
+		log.Println("Done already for ", thId)
+		return "already handle", nil
+	}
+	var raw string
+	raw = "From: " + uid
+	raw += "\nTo: " + headerMap["Reply-To"]
+	raw += "\nSubject: " + headerMap["Subject"]
+	t := time.Now()
+	d := t.Format(time.RFC1123Z)
+	raw += "\nDate: " + d
+	raw += "\nMessage-Id:<CAANbcPMiNyFVQstZH89+isO6iXYBz0bhc9V=M+H9FtiGbu_nCg@mail.gmail.com>"
+	autoConfig, err := confighelper.GetAutoResponseConfig()
+	if err != nil {
+		return "", err
+	}
+	raw += "\n" + autoConfig.LinkedinResponse
+	encoded := base64.StdEncoding.EncodeToString([]byte(raw))
+	s := strings.Replace(encoded, "+", "-", -1)
+	s = strings.Replace(s, "/", "_", -1)
+	log.Println(raw)
+	log.Println(s)
+	message := &gmail.Message{}
+	message.Raw = s
+	message.ThreadId = thId
+
+	res, sendErr := srv.Users.Messages.Send(uid, message).Do()
+	log.Println(res.HTTPStatusCode)
+	if res.HTTPStatusCode == http.StatusOK {
+		log.Println("Replied to threadId", thId)
+		RespondedIdsMap[thId] = true
+		AddToRespondedIds(thId)
+	}
+	return res.Raw, sendErr
+
+}
+
+func AddToRespondedIds(id string) {
+	f, err := os.OpenFile("Responded.txt", os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return
+	}
+
+	defer f.Close()
+
+	if _, err = f.WriteString(id + "\n"); err != nil {
+		return
+	}
 }
