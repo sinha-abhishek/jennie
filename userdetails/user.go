@@ -3,11 +3,10 @@ package userdetails
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"log"
-	"os"
 	"time"
 
+	"github.com/sinha-abhishek/jennie/awshelper"
 	"github.com/sinha-abhishek/jennie/cryptohelper"
 	"github.com/sinha-abhishek/jennie/linkedin"
 	"golang.org/x/oauth2"
@@ -26,21 +25,16 @@ var (
 )
 
 func GetUser(userID string) (*User, error) {
+	ud, _ := awshelper.FetchUser(userID)
+	log.Println("user dunamo=", string(ud))
 	user := &User{}
-	f, err := ioutil.ReadFile(userID + ".txt")
-	if err != nil {
-		log.Println("Not found")
-		return user, err
-	}
-	b, err2 := cryptohelper.Decrypt(f, userID)
+	b, err2 := cryptohelper.Decrypt(ud, userID)
 	log.Println(string(b))
 	if err2 != nil {
 		log.Println("can't decrypt")
 		return user, err2
 	}
-	err = json.Unmarshal(b, user)
-	//TODO : remove
-	//userList = append(userList, *user)
+	err := json.Unmarshal(b, user)
 	return user, err
 }
 
@@ -67,19 +61,12 @@ func FetchAndSaveUser(ctx context.Context, config *oauth2.Config, token *oauth2.
 		log.Println(err4)
 		return nil, err4
 	}
-	//TODO: move this to a DB
-	//TODO:
-	err3 := ioutil.WriteFile(user.UserID+".txt", encData, os.ModeExclusive)
-	// f, err3 := os.OpenFile(user.UserID+".txt", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
-	if err3 != nil {
-		log.Fatalf("Unable to cache user: %v", err3)
-		return nil, err3
+	err = awshelper.SaveUser(user.UserID, string(encData))
+	if err != nil {
+		log.Println("Failed to save user", err)
 	}
-	// defer f.Close()
-	// log.Println(encData)
-	// json.NewEncoder(f).Encode(encData)
 	userList = append(userList, user)
-	return &user, nil
+	return &user, err
 }
 
 func PeriodicPuller(ctx context.Context, config *oauth2.Config) {

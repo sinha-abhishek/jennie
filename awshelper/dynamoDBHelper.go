@@ -1,11 +1,14 @@
 package awshelper
 
 import (
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 )
 
 func Init() error {
@@ -21,20 +24,26 @@ func Init() error {
 		log.Println("Can't initialize session", err2)
 		return err2
 	}
-	found := false
+	found := map[string]bool{"users": false, "responded_ids": false}
 	for _, table := range result.TableNames {
-		if *table == "users" {
-			found = true
-			break
+		log.Println("tablename found ", *table)
+		found[*table] = true
+	}
+	log.Println("found tables=", found)
+	for k, v := range found {
+		if v == false {
+			err = createTable(svc, k)
+			if err != nil {
+				log.Println("Failed to create table ", k)
+				return err
+			}
 		}
 	}
-	if !found {
-		err = createTable(svc)
-	}
+
 	return err
 }
 
-func createTable(svc *dynamodb.DynamoDB) error {
+func createTable(svc *dynamodb.DynamoDB, tableName string) error {
 	input := &dynamodb.CreateTableInput{
 		AttributeDefinitions: []*dynamodb.AttributeDefinition{
 			{
@@ -52,7 +61,7 @@ func createTable(svc *dynamodb.DynamoDB) error {
 			ReadCapacityUnits:  aws.Int64(1),
 			WriteCapacityUnits: aws.Int64(1),
 		},
-		TableName: aws.String("users"),
+		TableName: aws.String(tableName),
 	}
 	_, err := svc.CreateTable(input)
 
@@ -61,4 +70,86 @@ func createTable(svc *dynamodb.DynamoDB) error {
 		fmt.Println(err.Error())
 	}
 	return err
+}
+
+type UserItem struct {
+	Uid      string `json:"uid"`
+	UserData string `json:"userdata"`
+}
+
+func getService() (*dynamodb.DynamoDB, error) {
+	helper := GetInstance()
+	sess, err := helper.GetSession()
+	if err != nil {
+		log.Println("Can't initialize session")
+		return nil, err
+	}
+	svc := dynamodb.New(sess)
+	return svc, err
+}
+
+func SaveUser(uid string, userData string) error {
+	svc, err := getService()
+	if err != nil {
+		log.Println("Can't initialize session")
+		return err
+	}
+	ud := base64.StdEncoding.EncodeToString([]byte(userData))
+	item := UserItem{
+		Uid:      uid,
+		UserData: ud,
+	}
+	log.Println("item=", item)
+	av, err2 := dynamodbattribute.MarshalMap(item)
+	if err2 != nil {
+		log.Println("Can't marshal item ", err2)
+		return err2
+	}
+	log.Println("item=", av)
+	input := &dynamodb.PutItemInput{
+		Item:      av,
+		TableName: aws.String("users"),
+	}
+	_, err = svc.PutItem(input)
+	if err != nil {
+		log.Println("Can't put item", err)
+		return err
+	}
+	return err
+}
+
+func FetchUser(uid string) ([]byte, error) {
+	svc, err := getService()
+	if err != nil {
+		log.Println("Can't initialize session")
+		return nil, err
+	}
+	result, err2 := svc.GetItem(&dynamodb.GetItemInput{
+		TableName: aws.String("users"),
+		Key: map[string]*dynamodb.AttributeValue{
+			"uid": {
+				S: aws.String(uid),
+			},
+		},
+	})
+	if err2 != nil {
+		log.Println("Can't get input", err2)
+		return nil, err2
+	}
+	item := &UserItem{}
+	err = dynamodbattribute.UnmarshalMap(result.Item, item)
+	if err != nil {
+		log.Println("Can't unmarshal input ", err)
+		return nil, err
+	}
+	if item.Uid != uid {
+		log.Println("Can't find uid ")
+		return nil, errors.New("user not found")
+	}
+	ud := item.UserData
+	userData, err3 := base64.StdEncoding.DecodeString(ud)
+	if err != nil {
+		log.Println("Can't decode user ", err3)
+	}
+	return userData, err3
 }

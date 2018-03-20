@@ -84,7 +84,7 @@ func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oau
 		log.Println("Got ", headerMap)
 		//TODO: reply to replyto fileds
 		//srv.Users.Messages.Send(user, message)
-		reply(uid, srv, msg, headerMap)
+		//reply(uid, srv, msg, headerMap)
 
 	}
 
