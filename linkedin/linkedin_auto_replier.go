@@ -3,14 +3,13 @@ package linkedin
 import (
 	"context"
 	"encoding/base64"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/sinha-abhishek/jennie/awshelper"
 	"github.com/sinha-abhishek/jennie/confighelper"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/gmail/v1"
@@ -19,35 +18,37 @@ import (
 var (
 	searchString = "from:*@linkedin.com replyto:*@linkedin.com -replyto:*donotreply*"
 )
-var RespondedIdsMap map[string]bool
 
 func InitializeLinkedinResponder() {
 	//TODO: move this to DynamoDB
-	log.Println("Reading responded file")
-	f, err := os.Open("responded.txt")
-	RespondedIdsMap = make(map[string]bool)
-	if err != nil {
-		log.Println("Failed to read responded file")
-		return
-	}
-	data, err := ioutil.ReadAll(f)
-	str := string(data)
-	s := strings.Split(str, "\n")
-	for _, v := range s {
-		RespondedIdsMap[v] = true
-	}
-	log.Println("Responded = ", RespondedIdsMap)
+	// log.Println("Reading responded file")
+	// f, err := os.Open("responded.txt")
+	// RespondedIdsMap = make(map[string]bool)
+	// if err != nil {
+	// 	log.Println("Failed to read responded file")
+	// 	return
+	// }
+	// data, err := ioutil.ReadAll(f)
+	// str := string(data)
+	// s := strings.Split(str, "\n")
+	// for _, v := range s {
+	// 	RespondedIdsMap[v] = true
+	// }
+	// log.Println("Responded = ", RespondedIdsMap)
 }
 
-func getTimeOfLastScan() time.Time {
+func getTimeOfLastScan(lastFetchTime time.Time) time.Time {
 	//TODO: store last responded timestamp and get after that
-	t := time.Now()
-	t2 := t.AddDate(0, 0, -7)
-	return t2
+	if time.Since(lastFetchTime) > 24*7*time.Hour {
+		t := time.Now()
+		t2 := t.AddDate(0, 0, -7)
+		return t2
+	}
+	return lastFetchTime
 }
 
-func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oauth2.Token, uid string) {
-	qtime := getTimeOfLastScan().Unix()
+func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oauth2.Token, uid string, lastFetchTime time.Time) error {
+	qtime := getTimeOfLastScan(lastFetchTime).Unix()
 	log.Println("token=", token)
 	qtimeString := strconv.FormatInt(qtime, 10)
 	query := searchString + " after:" + qtimeString
@@ -55,7 +56,7 @@ func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oau
 	srv, err := gmail.New(client)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	user := uid
 	log.Println(query)
@@ -63,7 +64,7 @@ func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oau
 	if err2 != nil {
 		log.Println(err2)
 		//http.Error(w, "Can't get messages", http.StatusInternalServerError)
-		return
+		return err2
 	}
 	messages := res.Messages
 	for _, msg := range messages {
@@ -72,7 +73,7 @@ func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oau
 			MetadataHeaders("Subject", "Date", "Reply-To").Format("metadata").Do()
 		if err3 != nil {
 			log.Println(err3)
-			return
+			return err3
 		}
 		log.Println(mail.Snippet)
 		headerMap := make(map[string]string)
@@ -84,15 +85,30 @@ func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oau
 		log.Println("Got ", headerMap)
 		//TODO: reply to replyto fileds
 		//srv.Users.Messages.Send(user, message)
-		//reply(uid, srv, msg, headerMap)
+		_, err4 := reply(uid, srv, msg, headerMap)
+		if err4 != nil {
+			return err4
+		}
 
 	}
+	return nil
+}
 
+func ClearRespondedIds(uid string) {
+	// if os.Remove("Responded.txt") == nil {
+	// 	RespondedIdsMap = make(map[string]bool)
+	// }
+	awshelper.ClearRespondedIds(uid)
 }
 
 func reply(uid string, srv *gmail.Service, msg *gmail.Message, headerMap map[string]string) (string, error) {
 	thId := msg.ThreadId
-	if RespondedIdsMap[thId] == true {
+	respondedDetails, err := awshelper.GetRespondedIdsForUser(uid)
+	if err != nil {
+		log.Println("Can't read from dynamo")
+		return "", err
+	}
+	if respondedDetails.Uid == uid && respondedDetails.RespondedIds[thId] == true {
 		log.Println("Done already for ", thId)
 		return "already handle", nil
 	}
@@ -122,22 +138,15 @@ func reply(uid string, srv *gmail.Service, msg *gmail.Message, headerMap map[str
 	log.Println(res.HTTPStatusCode)
 	if res.HTTPStatusCode == http.StatusOK {
 		log.Println("Replied to threadId", thId)
-		RespondedIdsMap[thId] = true
-		AddToRespondedIds(thId)
+		AddToRespondedIds(thId, uid)
 	}
 	return res.Raw, sendErr
 
 }
 
-func AddToRespondedIds(id string) {
-	f, err := os.OpenFile("Responded.txt", os.O_APPEND|os.O_WRONLY, 0600)
+func AddToRespondedIds(id string, uid string) {
+	err := awshelper.AppendRespondedID(id, uid)
 	if err != nil {
-		return
-	}
-
-	defer f.Close()
-
-	if _, err = f.WriteString(id + "\n"); err != nil {
 		return
 	}
 }

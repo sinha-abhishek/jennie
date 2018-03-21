@@ -205,11 +205,22 @@ func main() {
 	}
 
 	err = awshelper.Init()
+
+	if err != nil {
+		log.Fatalf("Unable to read client secret file: %v", err)
+		panic(err)
+	}
+
 	err = cryptohelper.InitializeAES()
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
 		panic(err)
 	}
+	// err = awshelper.AppendRespondedID("12334", "abhi.bill@gmail.com")
+	// err = awshelper.AppendRespondedID("12335", "abhi.bill@gmail.com")
+	// item, erritem := awshelper.GetRespondedIdsForUser("abhi.bill@gmail.com")
+	// log.Println(item, erritem)
+	// awshelper.ClearRespondedIds("abhi.bill@gmail.com")
 	linkedin.InitializeLinkedinResponder()
 
 	// If modifying these scopes, delete your previously saved credentials

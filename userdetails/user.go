@@ -55,18 +55,23 @@ func FetchAndSaveUser(ctx context.Context, config *oauth2.Config, token *oauth2.
 	user.UserID = res.EmailAddress
 	user.Token = *token
 
+	err = user.Save()
+	userList = append(userList, user)
+	return &user, err
+}
+
+func (user *User) Save() error {
 	userData, _ := json.Marshal(user)
-	encData, err4 := cryptohelper.Encrypt(userData, user.UserID)
-	if err4 != nil {
-		log.Println(err4)
-		return nil, err4
+	encData, err := cryptohelper.Encrypt(userData, user.UserID)
+	if err != nil {
+		log.Println(err)
+		return err
 	}
 	err = awshelper.SaveUser(user.UserID, string(encData))
 	if err != nil {
 		log.Println("Failed to save user", err)
 	}
-	userList = append(userList, user)
-	return &user, err
+	return err
 }
 
 func PeriodicPuller(ctx context.Context, config *oauth2.Config) {
@@ -87,5 +92,12 @@ func InitUserList() {
 }
 
 func (user *User) DoEmailAutomationForUser(ctx context.Context, config *oauth2.Config) {
-	linkedin.SearchMailAndRespond(ctx, config, &user.Token, user.UserID)
+	err := linkedin.SearchMailAndRespond(ctx, config, &user.Token, user.UserID, user.LastLinkedinFetch)
+	if err == nil {
+		user.LastLinkedinFetch = time.Now()
+		err = user.Save()
+		if err == nil {
+			linkedin.ClearRespondedIds(user.UserID)
+		}
+	}
 }
