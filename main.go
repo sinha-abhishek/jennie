@@ -221,6 +221,13 @@ func main() {
 	// item, erritem := awshelper.GetRespondedIdsForUser("abhi.bill@gmail.com")
 	// log.Println(item, erritem)
 	// awshelper.ClearRespondedIds("abhi.bill@gmail.com")
+	//
+	err = awshelper.InitializeQueues()
+	if err != nil {
+		log.Fatalf("Unable to initalize queue: %v", err)
+		panic(err)
+	}
+	//err = awshelper.SendUpdateMessage("uid", "abhi.bill@gmail.com", 3600)
 	linkedin.InitializeLinkedinResponder()
 
 	// If modifying these scopes, delete your previously saved credentials

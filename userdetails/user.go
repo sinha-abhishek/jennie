@@ -51,13 +51,21 @@ func FetchAndSaveUser(ctx context.Context, config *oauth2.Config, token *oauth2.
 		log.Println(err2)
 		return nil, err2
 	}
-	user := User{}
+	savedUser, err3 := GetUser(res.EmailAddress)
+	var user *User
+	if err3 == nil && savedUser.UserID == res.EmailAddress {
+		log.Println("exisitng user ", res.EmailAddress)
+		user = savedUser
+	} else {
+		user = &User{}
+	}
 	user.UserID = res.EmailAddress
 	user.Token = *token
 
 	err = user.Save()
-	userList = append(userList, user)
-	return &user, err
+	//userList = append(userList, user)
+	err = awshelper.SendUpdateMessage("uid", user.UserID, 600)
+	return user, err
 }
 
 func (user *User) Save() error {
