@@ -64,7 +64,7 @@ func FetchAndSaveUser(ctx context.Context, config *oauth2.Config, token *oauth2.
 
 	err = user.Save()
 	//userList = append(userList, user)
-	err = awshelper.SendUpdateMessage("uid", user.UserID, 600)
+	err = awshelper.SendUpdateMessage("uid", user.UserID, 800)
 	return user, err
 }
 
@@ -83,13 +83,29 @@ func (user *User) Save() error {
 }
 
 func PeriodicPuller(ctx context.Context, config *oauth2.Config) {
-	t := time.NewTimer(15 * time.Second)
+	t := time.NewTimer(15 * time.Second) //TODO: fix time period
 	for {
 		select {
 		case <-t.C:
-			for _, user := range userList {
-				user.DoEmailAutomationForUser(ctx, config)
-				t.Reset(15 * time.Second)
+			log.Println("pulling...")
+			msgs, err := awshelper.GetUpdateMessages("uid")
+			var success []*string
+			var uidsSuccess []string
+			if err == nil {
+				for _, v := range msgs {
+					uid := *v.Body
+					user, err2 := GetUser(uid)
+					if err2 == nil {
+						user.DoEmailAutomationForUser(ctx, config)
+						uidsSuccess = append(uidsSuccess, uid)
+						success = append(success, v.ReceiptHandle)
+					}
+				}
+				awshelper.DeleteMessages(success)
+				for _, u := range uidsSuccess {
+					awshelper.SendUpdateMessage("uid", u, 800)
+				}
+				t.Reset(30 * time.Second)
 			}
 		}
 	}

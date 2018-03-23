@@ -227,7 +227,9 @@ func main() {
 		log.Fatalf("Unable to initalize queue: %v", err)
 		panic(err)
 	}
-	//err = awshelper.SendUpdateMessage("uid", "abhi.bill@gmail.com", 3600)
+	// awshelper.SendUpdateMessage("uid", "abhi.bill@gmail.com", 1)
+	// lst, _ := awshelper.GetUpdateMessages("uid")
+	// log.Println(lst)
 	linkedin.InitializeLinkedinResponder()
 
 	// If modifying these scopes, delete your previously saved credentials
