@@ -3,6 +3,7 @@ package linkedin
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -47,7 +48,7 @@ func getTimeOfLastScan(lastFetchTime time.Time) time.Time {
 	return lastFetchTime
 }
 
-func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oauth2.Token, uid string, lastFetchTime time.Time) error {
+func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oauth2.Token, uid string, lastFetchTime time.Time, username string) error {
 	qtime := getTimeOfLastScan(lastFetchTime).Unix()
 	log.Println("token=", token)
 	qtimeString := strconv.FormatInt(qtime, 10)
@@ -58,6 +59,12 @@ func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oau
 		log.Println(err)
 		return err
 	}
+	autoConfig, err := confighelper.GetAutoResponseConfig()
+	if err != nil {
+		return err
+	}
+	rText := fmt.Sprintf(autoConfig.LinkedinResponse, username, username, uid)
+	log.Println("replytext=", rText)
 	user := uid
 	log.Println(query)
 	res, err2 := srv.Users.Messages.List(user).MaxResults(10).Q(query).Do()
@@ -85,7 +92,7 @@ func SearchMailAndRespond(ctx context.Context, config *oauth2.Config, token *oau
 		log.Println("Got ", headerMap)
 		//TODO: reply to replyto fileds
 		//srv.Users.Messages.Send(user, message)
-		_, err4 := reply(uid, srv, msg, headerMap)
+		_, err4 := reply(uid, srv, msg, headerMap, username)
 		if err4 != nil {
 			return err4
 		}
@@ -101,7 +108,7 @@ func ClearRespondedIds(uid string) {
 	awshelper.ClearRespondedIds(uid)
 }
 
-func reply(uid string, srv *gmail.Service, msg *gmail.Message, headerMap map[string]string) (string, error) {
+func reply(uid string, srv *gmail.Service, msg *gmail.Message, headerMap map[string]string, username string) (string, error) {
 	thId := msg.ThreadId
 	respondedDetails, err := awshelper.GetRespondedIdsForUser(uid)
 	if err != nil {
@@ -124,7 +131,8 @@ func reply(uid string, srv *gmail.Service, msg *gmail.Message, headerMap map[str
 	if err != nil {
 		return "", err
 	}
-	raw += "\n" + autoConfig.LinkedinResponse
+	rText := fmt.Sprintf(autoConfig.LinkedinResponse, username, username, uid)
+	raw += "\n" + rText
 	encoded := base64.StdEncoding.EncodeToString([]byte(raw))
 	s := strings.Replace(encoded, "+", "-", -1)
 	s = strings.Replace(s, "/", "_", -1)

@@ -11,6 +11,7 @@ import (
 	"github.com/sinha-abhishek/jennie/linkedin"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/gmail/v1"
+	"google.golang.org/api/plus/v1"
 )
 
 type User struct {
@@ -18,6 +19,7 @@ type User struct {
 	LastLinkedinFetch time.Time    `json:"lastLinkedinFetch"`
 	LastEmailScan     time.Time    `json:"lastEmailScan"`
 	Token             oauth2.Token `json:"token"`
+	Name              string       `json:"name"`
 }
 
 var (
@@ -41,6 +43,7 @@ func GetUser(userID string) (*User, error) {
 func FetchAndSaveUser(ctx context.Context, config *oauth2.Config, token *oauth2.Token) (*User, error) {
 	client := config.Client(ctx, token)
 	srv, err := gmail.New(client)
+
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -51,6 +54,19 @@ func FetchAndSaveUser(ctx context.Context, config *oauth2.Config, token *oauth2.
 		log.Println(err2)
 		return nil, err2
 	}
+
+	srv2, err := plus.New(client)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	p, err := srv2.People.Get("me").Do()
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	log.Println("person=", p.DisplayName)
+
 	savedUser, err3 := GetUser(res.EmailAddress)
 	var user *User
 	if err3 == nil && savedUser.UserID == res.EmailAddress {
@@ -61,7 +77,7 @@ func FetchAndSaveUser(ctx context.Context, config *oauth2.Config, token *oauth2.
 	}
 	user.UserID = res.EmailAddress
 	user.Token = *token
-
+	user.Name = p.DisplayName
 	err = user.Save()
 	//userList = append(userList, user)
 	err = awshelper.SendUpdateMessage("uid", user.UserID, 800)
@@ -105,8 +121,8 @@ func PeriodicPuller(ctx context.Context, config *oauth2.Config) {
 				for _, u := range uidsSuccess {
 					awshelper.SendUpdateMessage("uid", u, 800)
 				}
-				t.Reset(30 * time.Second)
 			}
+			t.Reset(30 * time.Second)
 		}
 	}
 }
@@ -116,7 +132,7 @@ func InitUserList() {
 }
 
 func (user *User) DoEmailAutomationForUser(ctx context.Context, config *oauth2.Config) {
-	err := linkedin.SearchMailAndRespond(ctx, config, &user.Token, user.UserID, user.LastLinkedinFetch)
+	err := linkedin.SearchMailAndRespond(ctx, config, &user.Token, user.UserID, user.LastLinkedinFetch, user.Name)
 	if err == nil {
 		user.LastLinkedinFetch = time.Now()
 		err = user.Save()

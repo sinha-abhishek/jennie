@@ -19,6 +19,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
+	"google.golang.org/api/plus/v1"
 )
 
 var config *oauth2.Config
@@ -186,9 +187,10 @@ func doTaskForUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func startServer() {
-	http.HandleFunc("/jennie/authorize", authorizeGmail)
-	http.HandleFunc("/jennie/onauthcallback", onAuthDone)
-	http.HandleFunc("/jennie/user", doTaskForUser)
+	http.HandleFunc("/jennie/authorize/", authorizeGmail)
+	http.HandleFunc("/jennie/onauthcallback/", onAuthDone)
+	http.HandleFunc("/jennie/user/", doTaskForUser)
+	http.Handle("/", http.FileServer(http.Dir("static/jennie-app/build/")))
 	err := http.ListenAndServe(":8000", nil)
 	if err != nil {
 		log.Println(err)
@@ -234,7 +236,7 @@ func main() {
 
 	// If modifying these scopes, delete your previously saved credentials
 	// at ~/.credentials/gmail-go-quickstart.json
-	config, err1 = google.ConfigFromJSON(b, gmail.GmailSendScope, gmail.GmailComposeScope, gmail.GmailModifyScope, gmail.GmailReadonlyScope)
+	config, err1 = google.ConfigFromJSON(b, gmail.GmailSendScope, gmail.GmailComposeScope, gmail.GmailModifyScope, gmail.GmailReadonlyScope, plus.PlusLoginScope, plus.PlusMeScope)
 	if err1 != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
