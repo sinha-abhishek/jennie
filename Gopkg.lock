@@ -45,6 +45,12 @@
   version = "v1.13.18"
 
 [[projects]]
+  name = "github.com/dgrijalva/jwt-go"
+  packages = ["."]
+  revision = "06ea1031745cb8b3dab3f6a236daf2b0aa468b7e"
+  version = "v3.2.0"
+
+[[projects]]
   name = "github.com/go-ini/ini"
   packages = ["."]
   revision = "6333e38ac20b8949a8dd68baa3650f4dee8f39f0"
@@ -89,7 +95,8 @@
     "gensupport",
     "gmail/v1",
     "googleapi",
-    "googleapi/internal/uritemplates"
+    "googleapi/internal/uritemplates",
+    "plus/v1"
   ]
   revision = "24928b980e6919be4c72647aacd53ebcbb8c4bab"
 
@@ -113,6 +120,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "22d85b0b222116c17954a8fb0fe5fff0db4311063fcb0dbfa51ddfe45030bbb7"
+  inputs-digest = "05db00fc6191fa3e8f6fbe23e5b702176623946fdbd61aa7669503df7c7249b2"
   solver-name = "gps-cdcl"
   solver-version = 1
