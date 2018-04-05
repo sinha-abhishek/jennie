@@ -10,7 +10,10 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
+	"time"
 
+	"github.com/sinha-abhishek/jennie/authhelper"
 	"github.com/sinha-abhishek/jennie/awshelper"
 	"github.com/sinha-abhishek/jennie/cryptohelper"
 	"github.com/sinha-abhishek/jennie/linkedin"
@@ -24,6 +27,7 @@ import (
 
 var config *oauth2.Config
 var ctx context.Context
+var auther authhelper.AuthHelper
 
 // getClient uses a Context and Config to retrieve a Token
 // then generate a Client. It returns the generated Client.
@@ -158,8 +162,18 @@ func onAuthDone(w http.ResponseWriter, r *http.Request) {
 	//
 	// w.Write(([]byte)("Got success"))
 	//linkedin.SearchMailAndRespond(ctx, config, tok)
-
-	w.Write(([]byte)("Got success"))
+	token, ref, err := auther.IssueToken(user.UserID, map[string]string{"id": user.UserID})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	res := map[string]string{"access_token": token, "refresh_token": ref}
+	b, err := json.Marshal(res)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(b)
 }
 
 func doTaskForUser(w http.ResponseWriter, r *http.Request) {
@@ -186,10 +200,62 @@ func doTaskForUser(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ah := r.Header.Get("Authorization")
+		id := r.Header.Get("X-IDENTIFIER")
+		if ah == "" || id == "" {
+			http.Error(w, "Auth or identifier header not set", http.StatusBadRequest)
+			return
+		}
+		bearers := strings.Split(ah, " ")
+		if len(bearers) < 2 {
+			http.Error(w, "Auth header not correct", http.StatusBadRequest)
+			return
+		}
+		token := bearers[1]
+		b, err := auther.ValidateToken(id, token)
+		if err != nil || !b {
+			http.Error(w, "Invalid token", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func refreshToken(w http.ResponseWriter, r *http.Request) {
+	v := make(map[string]string)
+	err := json.NewDecoder(r.Body).Decode(&v)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	token, ok := v["access_token"]
+	refToken, ok := v["refresh_token"]
+	id, ok := v["id"]
+	if !ok {
+		http.Error(w, "Invalid params access_token, refresh_token or id missing", http.StatusBadRequest)
+		return
+	}
+	tok, ref, err := auther.RefreshToken(id, token, refToken)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	res := map[string]string{"access_token": tok, "refresh_token": ref}
+	b, err := json.Marshal(res)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(b)
+}
+
 func startServer() {
 	http.HandleFunc("/jennie/authorize/", authorizeGmail)
 	http.HandleFunc("/jennie/onauthcallback/", onAuthDone)
-	http.HandleFunc("/jennie/user/", doTaskForUser)
+	http.Handle("/jennie/user/", authenticate(http.HandlerFunc(doTaskForUser)))
+	http.HandleFunc("/refresh_token", refreshToken)
 	http.Handle("/", http.FileServer(http.Dir("static/jennie-app/build/")))
 	err := http.ListenAndServe(":8000", nil)
 	if err != nil {
@@ -218,6 +284,19 @@ func main() {
 		log.Fatalf("Unable to read client secret file: %v", err)
 		panic(err)
 	}
+	var storage authhelper.StorageInterface
+	storage, err = authhelper.GetDynamoStorage()
+	if err != nil {
+		log.Fatalf("Unable to create storage: %v", err)
+		panic(err)
+	}
+	err = storage.Setup()
+	if err != nil {
+		log.Fatalf("Unable to create storage: %v", err)
+		panic(err)
+	}
+	auther = authhelper.GetJwtAuthHelper("difeyruyuyc324bcd#", storage, 2*time.Minute)
+
 	// err = awshelper.AppendRespondedID("12334", "abhi.bill@gmail.com")
 	// err = awshelper.AppendRespondedID("12335", "abhi.bill@gmail.com")
 	// item, erritem := awshelper.GetRespondedIdsForUser("abhi.bill@gmail.com")

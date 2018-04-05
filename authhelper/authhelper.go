@@ -89,7 +89,7 @@ func (jwh *JwtAuthHelper) RefreshToken(identifier string, accessToken string, re
 	if strings.Compare(rt, refreshToken) != 0 {
 		return "", "", errors.New("refresh token not valid")
 	}
-	err = jwh.db.DeleteRefreshToken(identifier)
+
 	if err != nil {
 		return "", "", err
 	}
@@ -101,7 +101,15 @@ func (jwh *JwtAuthHelper) RefreshToken(identifier string, accessToken string, re
 	})
 	log.Printf("token %+v", token)
 	if err != nil {
-		return "", "", err
+		if e, ok := err.(*jwt.ValidationError); ok {
+			log.Printf("type correct err=%+v e=%+v e.Errors=%+v vee=%+v", err, e, e.Errors, jwt.ValidationErrorExpired)
+			if e.Errors&jwt.ValidationErrorExpired == 0 {
+				return "", "", err
+			}
+		} else {
+			return "", "", err
+		}
+
 	}
 	claims := token.Claims.(jwt.MapClaims)
 	claimMap := make(map[string]string)
@@ -110,5 +118,6 @@ func (jwh *JwtAuthHelper) RefreshToken(identifier string, accessToken string, re
 			claimMap[k] = s
 		}
 	}
+	err = jwh.db.DeleteRefreshToken(identifier)
 	return jwh.IssueToken(identifier, claimMap)
 }

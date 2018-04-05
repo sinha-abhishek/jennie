@@ -99,7 +99,7 @@ func (user *User) Save() error {
 }
 
 func PeriodicPuller(ctx context.Context, config *oauth2.Config) {
-	t := time.NewTimer(15 * time.Second) //TODO: fix time period
+	t := time.NewTimer(15 * time.Minute) //TODO: fix time period
 	for {
 		select {
 		case <-t.C:
@@ -122,7 +122,7 @@ func PeriodicPuller(ctx context.Context, config *oauth2.Config) {
 					awshelper.SendUpdateMessage("uid", u, 800)
 				}
 			}
-			t.Reset(30 * time.Second)
+			t.Reset(30 * time.Minute)
 		}
 	}
 }
