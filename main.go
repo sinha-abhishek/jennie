@@ -176,6 +176,31 @@ func onAuthDone(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
+func setReplyText(w http.ResponseWriter, r *http.Request) {
+	m := make(map[string]string)
+	err := json.NewDecoder(r.Body).Decode(&m)
+	if err != nil {
+		http.Error(w, "request format not correct", http.StatusBadRequest)
+		return
+	}
+	id := r.Header.Get("X-IDENTIFIER")
+	msg, ok := m["message"]
+	if !ok || id == "" {
+		http.Error(w, "request format not correct", http.StatusBadRequest)
+		return
+	}
+	user, err := userdetails.GetUser(id)
+	if err != nil {
+		log.Println("id not recieved or user not found", err)
+		http.Error(w, "id not recieved or user not found", http.StatusBadRequest)
+	} else {
+		//linkedin.SearchMailAndRespond(ctx, config, token)
+		user.LinkedinMessage = msg
+		user.Save()
+		log.Println("I have user ", user)
+	}
+}
+
 func doTaskForUser(w http.ResponseWriter, r *http.Request) {
 	host := r.Host
 	log.Println("host=", host)
@@ -255,6 +280,7 @@ func startServer() {
 	http.HandleFunc("/jennie/authorize/", authorizeGmail)
 	http.HandleFunc("/jennie/onauthcallback/", onAuthDone)
 	http.Handle("/jennie/user/", authenticate(http.HandlerFunc(doTaskForUser)))
+	http.Handle("/jennie/update_reply", authenticate(http.HandlerFunc(setReplyText)))
 	http.HandleFunc("/refresh_token", refreshToken)
 	http.Handle("/", http.FileServer(http.Dir("static/jennie-app/build/")))
 	err := http.ListenAndServe(":8000", nil)

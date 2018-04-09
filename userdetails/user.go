@@ -3,10 +3,12 @@ package userdetails
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
 	"github.com/sinha-abhishek/jennie/awshelper"
+	"github.com/sinha-abhishek/jennie/confighelper"
 	"github.com/sinha-abhishek/jennie/cryptohelper"
 	"github.com/sinha-abhishek/jennie/linkedin"
 	"golang.org/x/oauth2"
@@ -20,6 +22,7 @@ type User struct {
 	LastEmailScan     time.Time    `json:"lastEmailScan"`
 	Token             oauth2.Token `json:"token"`
 	Name              string       `json:"name"`
+	LinkedinMessage   string       `json:"auto_reply"`
 }
 
 var (
@@ -78,6 +81,13 @@ func FetchAndSaveUser(ctx context.Context, config *oauth2.Config, token *oauth2.
 	user.UserID = res.EmailAddress
 	user.Token = *token
 	user.Name = p.DisplayName
+	autoConfig, err := confighelper.GetAutoResponseConfig()
+	if err != nil {
+		return nil, err
+	}
+	rText := fmt.Sprintf(autoConfig.LinkedinResponse, user.Name, user.Name, user.UserID)
+	log.Println("replytext=", rText)
+	user.LinkedinMessage = rText
 	err = user.Save()
 	//userList = append(userList, user)
 	err = awshelper.SendUpdateMessage("uid", user.UserID, 800)
@@ -132,7 +142,7 @@ func InitUserList() {
 }
 
 func (user *User) DoEmailAutomationForUser(ctx context.Context, config *oauth2.Config) {
-	err := linkedin.SearchMailAndRespond(ctx, config, &user.Token, user.UserID, user.LastLinkedinFetch, user.Name)
+	err := linkedin.SearchMailAndRespond(ctx, config, &user.Token, user.UserID, user.LastLinkedinFetch, user.LinkedinMessage)
 	if err == nil {
 		user.LastLinkedinFetch = time.Now()
 		err = user.Save()
